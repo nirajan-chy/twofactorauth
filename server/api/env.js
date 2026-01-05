@@ -3,6 +3,7 @@ dotenv.config();
 const email = process.env.SMTP_EMAIL;
 const password = process.env.SMTP_PASSWORD;
 const secret_key = process.env.SECRET_KEY;
+const refresh_key = process.env.REFRESH_KEY;
 const client_url = process.env.CLIENT_URL;
 const DB_NAME = process.env.DB_NAME;
 const DB_USERNAME = process.env.DB_USERNAME;
@@ -15,6 +16,7 @@ module.exports = {
   email,
   password,
   secret_key,
+  refresh_key,
   client_url,
   DB_USERNAME,
   DB_PASSWORD,

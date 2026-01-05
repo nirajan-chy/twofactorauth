@@ -1,9 +1,6 @@
-
-
-// In-memory OTP store (or replace with DB later)
+// services/otpService.js
 const otpStore = {};  
 
-// Generate 6-digit OTP
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -19,16 +16,16 @@ function saveOtp(email, code) {
 // Verify OTP
 function verifyOtp(email, code) {
   const otpData = otpStore[email];
-  if (!otpData) return false;
-  if (otpData.expires < Date.now()) {
+  if (!otpData) return false;          // OTP not found
+  if (otpData.expires < Date.now()) {  // OTP expired
     delete otpStore[email];
-    return false; // expired
+    return false;
   }
   if (otpData.code === code) {
-    delete otpStore[email]; // OTP used
+    delete otpStore[email];             // OTP used
     return true;
   }
-  return false;
+  return false;                         // OTP mismatch
 }
 
 module.exports = {

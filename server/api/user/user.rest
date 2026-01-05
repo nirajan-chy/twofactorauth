@@ -2,22 +2,31 @@ POST http://localhost:5000/user/register
 Content-Type: application/json
 
 {
-  "name": "samir",
-  "email": "samir@gmail.com",
-  "password": "Samir@123",
+  "name": "Nirmal",
+  "email": "nirmal@gmail.com",
+  "password": "Nirmal@123",
   "role": "user",
   "isVerified": false
 }
 
 ###
-POST http://localhost:5000/user/verify/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MjksImlhdCI6MTc2NzUxMDM1NSwiZXhwIjoxNzY3NTk2NzU1fQ.AKSbQpJDmT-yBpOtb8J73DIQO1eOQuEXoluLkSyff70
+POST http://localhost:5000/user/verify/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MzIsImlhdCI6MTc2NzU5NDcwNywiZXhwIjoxNzY3NjgxMTA3fQ.hv6yqqEWtNzFouyiMjkvb3QDGRQTl-rNbYUMSppIJUM
 
 ###
 POST http://localhost:5000/user/login
 Content-Type: application/json
 
 {
-   "email": "nirajan98689@gmail.com",
-   "password": "Bunny@123"
+   "email": "nirmal@gmail.com",
+   "password": "Nirmal@123"
 }
 // token :eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MjksImlhdCI6MTc2NzUxMzQ1NSwiZXhwIjoxNzY3NTk5ODU1fQ.ps4KU6A8fTVaCrYJ05nM-GTVNtDgBY9KrSDS3ByACMA
+
+###
+POST http://localhost:5000/user/verify-otp
+Content-Type: application/json
+
+{
+  "email" : "nirajan98689@gmail.com",
+  "otp" : "441167"
+}

@@ -1,12 +1,13 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { User } = require("../models/user.model");
-const { secret_key, client_url } = require("../../api/env");
+const { secret_key } = require("../../api/env");
 const tryCatch = require("../middlewares/tryCatch");
 const sendEmail = require("../services/sendEmail");
 const { JSON } = require("sequelize");
 const getOtpHtml = require("../services/otpHtml");
-const { generateOtp, saveOtp } = require("../services/otpGenerate");
+const { generateOtp, saveOtp, verifyOtp } = require("../services/otpGenerate");
+const generateToken = require("../services/generateToken");
+const { User } = require("../models/user.model");
 
 exports.userRegister = tryCatch(async (req, res) => {
   const { name, email, password } = req.body;
@@ -97,69 +98,81 @@ exports.verifyEmail = tryCatch(async (req, res) => {
   });
 });
 
-
-
-
-exports.login = tryCatch(async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Email and password are required",
-    });
-  }
-
-  // Find user
-  const user = await User.findOne({ where: { email } });
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: "Invalid credentials",
-    });
-  }
-
-  // Check if email is verified
-  if (!user.isVerified) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid credentials",
-    });
-  }
-
-  // Check password
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid credentials",
-    });
-  }
-
-  // Generate OTP
-  const otp = generateOtp();
-  saveOtp(user.email, otp);
-
-  // Send OTP email
-  const html = getOtpHtml({ email: user.email, otp });
-
+exports.login = async (req, res) => {
   try {
-    await sendEmail({
-      email: user.email,
-      subject: "OTP for verification",
-      html,
-    });
-    console.log("OTP sent to:", user.email);
-  } catch (err) {
-    console.error("Error sending OTP email:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to send OTP email",
-    });
-  }
+    const { email, password, otp } = req.body;
 
-  res.json({
-    success: true,
-    message: "OTP sent. It is valid for 5 minutes.",
-  });
-});
+    console.log(email);
+
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
+    }
+
+    const user = await User.findOne({ where: { email: email } });
+
+    console.log(user);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    if (!otp || !verifyOtp(email, otp)) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    const accessToken = jwt.sign({ id: user.id }, secret_key, {
+      expiresIn: "2m",
+    });
+    const refreshToken = jwt.sign({ id: user.id }, refresh_key, {
+      expiresIn: "7d",
+    });
+
+    return res.status(200).json({
+      success: true,
+      accessToken,
+      refreshToken,
+    });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP required" });
+    }
+
+    const isValid = verifyOtp(req, email, otp);
+    console.log(isValid);
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const tokens = generateToken(user.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified and token generated ✅",
+      ...tokens,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
