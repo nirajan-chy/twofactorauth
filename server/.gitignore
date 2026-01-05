@@ -1,0 +1,32 @@
+/node_modules
+.env
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Build folders
+/dist
+/build
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
+
+# Certificates / Keys
+*.pem
+*.key
+*.crt
+
+# Temp files
+/tmp
+*.swp
+*.bak
+.env
+.env
+.env
+.env

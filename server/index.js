@@ -1,0 +1,30 @@
+const dotenv = require("dotenv");
+dotenv.config();
+const cors = require("cors");
+
+const express = require("express");
+const userRouter = require("./src/routes/user.route");
+const { testPostgresConnection } = require("./config/postgresConnect");
+const { DB_PORT } = require("./api/env");
+
+const app = express();
+
+app.use(express.json());
+
+app.use(
+  cors({
+    origin: "http://localhost:3000", // Your frontend URL
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true, // Allow cookies if needed
+  })
+);
+
+const PORT = process.env.PORT || 5000;
+
+app.use("/user", userRouter);
+
+testPostgresConnection();
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
