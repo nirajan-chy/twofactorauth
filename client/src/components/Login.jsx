@@ -45,7 +45,7 @@ export default function LoginPage() {
 
         // 4. Redirect after short delay
         setTimeout(() => {
-          router.push("/"); // Change this to your dashboard/home route
+          router.push("/otp"); // Change this to your dashboard/home route
         }, 1000);
       } else {
         toast.error(message || "Login failed");
@@ -86,7 +86,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex justify-center mb-4">
             <img 
-              src="/image.png" 
+              src="/logo.png" 
               alt="Logo" 
               className="h-32 w-auto object-contain drop-shadow-sm" 
             />
