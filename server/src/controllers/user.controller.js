@@ -1,6 +1,6 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { secret_key } = require("../../api/env");
+const { secret_key, refresh_key } = require("../../api/env");
 const tryCatch = require("../middlewares/tryCatch");
 const sendEmail = require("../services/sendEmail");
 const { JSON } = require("sequelize");
@@ -98,60 +98,71 @@ exports.verifyEmail = tryCatch(async (req, res) => {
   });
 });
 
-exports.login = async (req, res) => {
-  try {
-    const { email, password, otp } = req.body;
+exports.login = tryCatch(async (req, res) => {
+  const { email, password } = req.body;
 
-    console.log(email);
-
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password required" });
-    }
-
-    const user = await User.findOne({ where: { email: email } });
-
-    console.log(user);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: "Invalid password" });
-    }
-
-    if (!otp || !verifyOtp(email, otp)) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    const accessToken = jwt.sign({ id: user.id }, secret_key, {
-      expiresIn: "2m",
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Email and password are required",
     });
-    const refreshToken = jwt.sign({ id: user.id }, refresh_key, {
-      expiresIn: "7d",
-    });
-
-    return res.status(200).json({
-      success: true,
-      accessToken,
-      refreshToken,
-    });
-  } catch (error) {
-    console.log(error.message);
-    return res.status(500).json({ message: "Server error" });
   }
-};
+
+  const user = await User.findOne({ where: { email } });
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  if (!user.isVerified) {
+    return res.status(403).json({
+      success: false,
+      message: "Please verify your email first",
+    });
+  }
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+
+  if (!isPasswordValid) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid password",
+    });
+  }
+
+  const otp = generateOtp();
+  // console.log(otp);
+  saveOtp(email, otp);
+
+  await sendEmail({
+    to: email,
+    subject: "Your Login OTP",
+    html: getOtpHtml({ email, otp }),
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "OTP sent to your email",
+  });
+});
 
 exports.verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
+    console.log("OTP:", otp);
 
     if (!email || !otp) {
-      return res.status(400).json({ message: "Email and OTP required" });
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP required",
+      });
     }
 
-    const isValid = verifyOtp(req, email, otp);
-    console.log(isValid);
+    const isValid = verifyOtp(email, otp);
+    console.log("OTP Valid:", isValid);
 
     if (!isValid) {
       return res.status(400).json({
@@ -161,18 +172,26 @@ exports.verifyOtp = async (req, res) => {
     }
 
     const user = await User.findOne({ where: { email } });
+
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
     const tokens = generateToken(user.id);
+    console.log(tokens);
 
     return res.status(200).json({
       success: true,
-      message: "OTP verified and token generated ✅",
+      message: "OTP verified and token generated ",
       ...tokens,
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

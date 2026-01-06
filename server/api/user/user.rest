@@ -10,7 +10,7 @@ Content-Type: application/json
 }
 
 ###
-POST http://localhost:5000/user/verify/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MzIsImlhdCI6MTc2NzU5NDcwNywiZXhwIjoxNzY3NjgxMTA3fQ.hv6yqqEWtNzFouyiMjkvb3QDGRQTl-rNbYUMSppIJUM
+POST http://localhost:5000/user/verify/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzY3NjEyNjU1LCJleHAiOjE3Njc2OTkwNTV9.7TvgPSbcE8q7xa5wAOXAQf5YBuSM4VsztbpatOH5ggM
 
 ###
 POST http://localhost:5000/user/login
@@ -27,6 +27,6 @@ POST http://localhost:5000/user/verify-otp
 Content-Type: application/json
 
 {
-  "email" : "nirajan98689@gmail.com",
-  "otp" : "441167"
+  "email" : "nirmal@gmail.com",
+  "otp" : "418342"
 }
