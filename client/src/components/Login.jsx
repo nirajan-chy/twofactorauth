@@ -19,10 +19,9 @@ export default function LoginPage() {
   
   const router = useRouter();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
 
-    // Basic Validation
     if (!formData.email || !formData.password) {
       toast.error("Please fill in all fields");
       return;
@@ -31,34 +30,38 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // 1. Call Backend Login Endpoint
       const response = await axios.post(`${BASE_URL}/user/login`, formData);
+
+      console.log("LOGIN RESPONSE:", response.data.response);
+
       const { success, message, token, user } = response.data;
 
-      // 2. Handle Success
       if (success || response.status === 200) {
         toast.success(message || "Login Successful!");
-        
-        // 3. Store Token/User Data (Crucial for keeping user logged in)
+
         if (token) localStorage.setItem("token", token);
         if (user) localStorage.setItem("user", JSON.stringify(user));
 
-        // 4. Redirect after short delay
+        console.log(response.data.response);
+
+        // ✅ FIXED: store email in sessionStorage
+        sessionStorage.setItem("otp_email", response.data.response);
+
+        // redirect to OTP page
         setTimeout(() => {
-          router.push("/otp"); // Change this to your dashboard/home route
-        }, 1000);
+          router.push("/otp");
+        }, 500);
       } else {
         toast.error(message || "Login failed");
-        setIsLoading(false);
       }
-
     } catch (error) {
       console.error("Login Error:", error);
-      const errorMessage = error.response?.data?.message || "Invalid credentials. Please try again.";
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || "Invalid credentials.");
+    } finally {
       setIsLoading(false);
     }
   };
+
 
   const handleSocialLogin = (provider) => {
     toast(`Connecting to ${provider}...`, { icon: '🔄' });
