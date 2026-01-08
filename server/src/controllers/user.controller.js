@@ -1,6 +1,8 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const { Op } = require("sequelize");
 const jwt = require("jsonwebtoken");
-const { secret_key, refresh_key } = require("../../api/env");
+const { secret_key, refresh_key, client_url } = require("../../api/env");
 const tryCatch = require("../middlewares/tryCatch");
 const sendEmail = require("../services/sendEmail");
 const { JSON } = require("sequelize");
@@ -21,10 +23,9 @@ exports.userRegister = tryCatch(async (req, res) => {
 
   const existingUser = await User.findOne({ where: { email } });
   if (existingUser) {
-    return res.status(400).json({
-      success: false,
-      message: "Email already exists",
-    });
+    return res
+      .status(400)
+      .json({ success: false, message: "Email already exists" });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -33,10 +34,11 @@ exports.userRegister = tryCatch(async (req, res) => {
     name,
     email,
     password: hashedPassword,
+    isVerified: false,
   });
 
   const token = jwt.sign({ id: newUser.id }, secret_key, { expiresIn: "1d" });
-  const verificationLink = `http://localhost:3000/verify/${encodeURIComponent(
+  const verificationLink = `http://localhost:3000/verify-email/${encodeURIComponent(
     token
   )}`;
 
@@ -44,14 +46,13 @@ exports.userRegister = tryCatch(async (req, res) => {
     <h1>Hello ${name}</h1>
     <p>Thanks for registering. Please verify your email by clicking below:</p>
     <a href="${verificationLink}">Verify Email</a>
-    <p>${token}</p>
   `;
 
-  await sendEmail({
-    to: email,
-    subject: "Verify your email",
-    html,
-  });
+  try {
+    await sendEmail({ to: email, subject: "Verify your email", html });
+  } catch (err) {
+    console.error("Email sending failed:", err);
+  }
 
   res.status(201).json({
     success: true,
@@ -62,39 +63,32 @@ exports.userRegister = tryCatch(async (req, res) => {
 
 exports.verifyEmail = tryCatch(async (req, res) => {
   const { token } = req.params;
+  console.log("Token:", token);
 
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      message: "Token missing",
-    });
-  }
+  if (!token)
+    return res.status(400).json({ success: false, message: "Token missing" });
 
   let decoded;
   try {
     decoded = jwt.verify(decodeURIComponent(token), secret_key);
+    console.log("Decoded token:", decoded);
   } catch (err) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token",
-    });
+    console.error(err);
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid or expired token" });
   }
 
   const user = await User.findByPk(decoded.id);
-
-  if (!user) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid token",
-    });
-  }
+  if (!user)
+    return res.status(400).json({ success: false, message: "Invalid token" });
 
   user.isVerified = true;
   await user.save();
+  console.log("User verified in DB:", user);
 
   res.status(200).json({
-    success: true,
-    message: "Email verified successfully",
+    message: "User verified successfully",
   });
 });
 
@@ -146,6 +140,7 @@ exports.login = tryCatch(async (req, res) => {
   res.status(200).json({
     success: true,
     message: "OTP sent to your email",
+    response: email,
   });
 });
 
@@ -191,6 +186,97 @@ exports.verifyOtp = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.forgetPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const otp = generateOtp();
+    const hashedOtp = await bcrypt.hash(otp, 10);
+
+    // ✅ SAVE OTP IN USER TABLE
+    user.resetOtp = hashedOtp;
+    user.resetOtpExpiry = Date.now() + 5 * 60 * 1000; // 5 minutes
+    await user.save();
+
+    await sendEmail({
+      to: email,
+      subject: "Your Password Reset OTP",
+      html: getOtpHtml({ email, otp }),
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "OTP sent to your email",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to send OTP",
+      error: error.message,
+    });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, enterOtp, password } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    if (!user.resetOtp || Date.now() > user.resetOtpExpiry) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    const isValid = await bcrypt.compare(enterOtp, user.resetOtp);
+    if (!isValid) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    user.password = await bcrypt.hash(password, 10);
+    user.resetOtp = null;
+    user.resetOtpExpiry = null;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successful",
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user)
+      return res.status(400).json({
+        message: "user not found" + error.message,
+      });
+
+    await user.destroy();
+    res.status(200).json({
+      message: "User deleted",
+      user: user,
+    });
+  } catch (error) {
+    res.status(500).json({
       message: error.message,
     });
   }

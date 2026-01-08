@@ -7,6 +7,7 @@ const express = require("express");
 const userRouter = require("./src/routes/user.route");
 const { testPostgresConnection } = require("./config/postgresConnect");
 const { DB_PORT } = require("./api/env");
+const twoFARouter = require("./src/routes/2fa.route");
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use(
 const PORT = process.env.PORT || 5000;
 
 app.use("/user", userRouter);
+app.use("/2fa", twoFARouter);
 
 testPostgresConnection();
 

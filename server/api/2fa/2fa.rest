@@ -1,0 +1,10 @@
+POST http://localhost:5000/2fa/setup
+Content-Type: application/json
+
+{
+  "success": true,
+  "qrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...", 
+  "manualCode": "JBSWY3DPEHPK3PXP",
+  "message": "Scan QR or enter manual code to enable 2FA"
+}
+

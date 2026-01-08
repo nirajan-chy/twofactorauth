@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Shield,
   Smartphone,
@@ -11,24 +12,39 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Settings,
   User,
   Lock,
   Mail,
   Bell,
   Download,
-  Trash2,
   RefreshCw,
 } from "lucide-react";
+import axios from "axios";
 
 export default function DashboardPage() {
+  const BASE_URL = process.env.NEXT_PUBLIC_NEXT_BASE_URL;
+  console.log(BASE_URL);
+
+  const router = useRouter();
+
+  // --- 1. User Identification (FIXED) ---
+  // In a real app, grab this from your Auth Context or useSession hook
+  const userId = "user_12345_placeholder";
+
+  // --- State Management ---
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
-  const [selectedSession, setSelectedSession] = useState(null);
   const [recoveryCodesShown, setRecoveryCodesShown] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
-  const sessions = [
+  // 2FA Specific State
+  const [qrCode, setQrCode] = useState("");
+  const [manualCode, setManualCode] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Session Data State
+  const [sessions, setSessions] = useState([
     {
       id: 1,
       device: "Chrome on Windows",
@@ -45,17 +61,10 @@ export default function DashboardPage() {
       lastActive: "1 hour ago",
       current: false,
     },
-    {
-      id: 3,
-      device: "Firefox on MacBook",
-      location: "Los Angeles, USA",
-      ip: "10.0.0.5",
-      lastActive: "2 days ago",
-      current: false,
-    },
-  ];
+  ]);
 
-  const activityLog = [
+  // Activity Log State
+  const [activityLog, setActivityLog] = useState([
     {
       id: 1,
       action: "Login successful",
@@ -70,21 +79,7 @@ export default function DashboardPage() {
       time: "3 days ago",
       status: "success",
     },
-    {
-      id: 3,
-      action: "Failed login attempt",
-      device: "Unknown device",
-      time: "5 days ago",
-      status: "warning",
-    },
-    {
-      id: 4,
-      action: "2FA disabled",
-      device: "Safari on iPhone",
-      time: "1 week ago",
-      status: "info",
-    },
-  ];
+  ]);
 
   const recoveryCodes = [
     "ABCD-1234-EFGH",
@@ -95,14 +90,96 @@ export default function DashboardPage() {
     "OPQR-1234-STUV",
   ];
 
-  const enable2FA = () => {
-    setShowQRModal(true);
+  // --- Actions ---
+
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    router.push("/login");
   };
 
-  const confirm2FA = () => {
-    setIs2FAEnabled(true);
-    setShowQRModal(false);
-    setRecoveryCodesShown(true);
+  // --- 2FA Logic (Hybrid: Works with or without Backend) ---
+  const enable2FA = async () => {
+    setIsLoading(true);
+    try {
+      // CHECK: Do we have an API URL configured?
+      if (BASE_URL) {
+        // --- REAL BACKEND LOGIC ---
+        const res = await axios.post(`${BASE_URL}/2fa/setup/${userId}`);
+        console.log(res);
+        const data = await res.json();
+        console.log(data);
+        if (!data.success) throw new Error(data.message);
+
+        setQrCode(data.qrCode);
+        setManualCode(data.manualCode);
+      } else {
+        // --- DEMO SIMULATION LOGIC (So UI works for you now) ---
+        console.log("Simulating API Call...");
+        await new Promise(resolve => setTimeout(resolve, 800)); // Fake delay
+
+        // Placeholder QR (Google Charts API for demo)
+        setQrCode(
+          `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth://totp/SecureVault:User?secret=JBSWY3DPEHPK3PXP&issuer=SecureVault`
+        );
+        setManualCode("JBSW Y3DP EHPK 3PXP");
+      }
+
+      setShowQRModal(true);
+      setVerificationCode("");
+    } catch (err) {
+      alert("Error starting 2FA: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirm2FA = async () => {
+    if (verificationCode.length !== 6) return;
+    setIsLoading(true);
+
+    try {
+      if (process.env.NEXT_PUBLIC_API_URL) {
+        // --- REAL BACKEND LOGIC ---
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/2fa/verify/${userId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ token: verificationCode }),
+          }
+        );
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+      } else {
+        // --- DEMO SIMULATION LOGIC ---
+        await new Promise(resolve => setTimeout(resolve, 800));
+        // In demo mode, we accept any 6 digit code
+      }
+
+      // Success Actions
+      setIs2FAEnabled(true);
+      setShowQRModal(false);
+      setRecoveryCodesShown(true);
+      setVerificationCode("");
+
+      // Update Activity Log
+      const newLog = {
+        id: Date.now(),
+        action: "2FA Enabled",
+        device: "Current Device",
+        time: "Just now",
+        status: "success",
+      };
+      setActivityLog(prev => [newLog, ...prev]);
+
+      alert("2FA Enabled Successfully 🎉");
+    } catch (err) {
+      alert("Invalid Code: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const disable2FA = () => {
@@ -112,19 +189,36 @@ export default function DashboardPage() {
       )
     ) {
       setIs2FAEnabled(false);
+      setRecoveryCodesShown(false);
+
+      const newLog = {
+        id: Date.now(),
+        action: "2FA Disabled",
+        device: "Current Device",
+        time: "Just now",
+        status: "warning",
+      };
+      setActivityLog(prev => [newLog, ...prev]);
     }
   };
 
   const revokeSession = sessionId => {
     if (confirm("Are you sure you want to revoke this session?")) {
-      console.log("Revoking session:", sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
     }
   };
 
+  const revokeAllSessions = () => {
+    if (confirm("Revoke all other sessions?")) {
+      setSessions(prev => prev.filter(s => s.current === true));
+    }
+  };
+
+  // --- JSX Render ---
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 pb-12">
       {/* Modern Navbar */}
-      <nav className="bg-white/80 backdrop-blur-lg shadow-sm border-b border-gray-200 sticky top-0 z-50">
+      <nav className="bg-white/80 backdrop-blur-lg shadow-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -143,17 +237,20 @@ export default function DashboardPage() {
                 <Bell className="w-5 h-5 text-gray-600" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
               </button>
-              <button className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-all">
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+              >
                 <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center">
                   <User className="w-5 h-5 text-white" />
                 </div>
-                <span className="font-medium">Logout</span>
+                <span className="font-medium cursor-pointer">Logout</span>
               </button>
             </div>
           </div>
         </div>
       </nav>
-
+      once if you lose access to your authenticator.
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Hero Section */}
         <div className="mb-8">
@@ -240,8 +337,8 @@ export default function DashboardPage() {
 
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
-          <div className="border-b border-gray-200">
-            <div className="flex gap-1 p-2">
+          <div className="border-b border-gray-200 overflow-x-auto">
+            <div className="flex gap-1 p-2 min-w-max">
               {["overview", "sessions", "activity", "settings"].map(tab => (
                 <button
                   key={tab}
@@ -365,13 +462,18 @@ export default function DashboardPage() {
 
                     <button
                       onClick={is2FAEnabled ? disable2FA : enable2FA}
-                      className={`w-full px-6 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg ${
+                      disabled={isLoading}
+                      className={`w-full px-6 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 ${
                         is2FAEnabled
                           ? "bg-red-500 text-white hover:bg-red-600"
                           : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700"
                       }`}
                     >
-                      {is2FAEnabled ? "Disable 2FA" : "Enable 2FA Now"}
+                      {isLoading
+                        ? "Processing..."
+                        : is2FAEnabled
+                          ? "Disable 2FA"
+                          : "Enable 2FA Now"}
                     </button>
                   </div>
 
@@ -391,7 +493,7 @@ export default function DashboardPage() {
                         {recoveryCodes.map((code, idx) => (
                           <div
                             key={idx}
-                            className="p-3 bg-white border border-yellow-300 rounded-lg font-mono text-sm text-center"
+                            className="p-3 bg-white border border-yellow-300 rounded-lg font-mono text-sm text-center select-all"
                           >
                             {code}
                           </div>
@@ -419,13 +521,21 @@ export default function DashboardPage() {
                       Manage devices that are currently logged into your account
                     </p>
                   </div>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+                  <button
+                    onClick={revokeAllSessions}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  >
                     <XCircle className="w-4 h-4" />
                     Revoke All
                   </button>
                 </div>
 
                 <div className="space-y-4">
+                  {sessions.length === 0 && (
+                    <div className="text-center p-8 text-gray-500">
+                      No active sessions found.
+                    </div>
+                  )}
                   {sessions.map(session => (
                     <div
                       key={session.id}
@@ -494,7 +604,7 @@ export default function DashboardPage() {
                       Recent security events and account changes
                     </p>
                   </div>
-                  <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700">
                     <RefreshCw className="w-4 h-4" />
                     Refresh
                   </button>
@@ -613,61 +723,65 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-
       {/* 2FA Setup Modal */}
       {showQRModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl animate-in">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Smartphone className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                Enable Two-Factor Authentication
-              </h3>
-              <p className="text-gray-600">
-                Scan this QR code with your authenticator app
-              </p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-center mb-4 text-gray-900">
+              Enable Two-Factor Authentication
+            </h3>
+
+            {/* QR CODE */}
+            <div className="flex justify-center mb-6">
+              {qrCode ? (
+                <img
+                  src={qrCode}
+                  alt="2FA QR Code"
+                  className="w-48 h-48 border rounded-lg"
+                />
+              ) : (
+                <div className="w-48 h-48 bg-gray-200 rounded-lg animate-pulse" />
+              )}
             </div>
 
-            <div className="bg-gray-100 p-6 rounded-xl mb-6 flex items-center justify-center">
-              <div className="w-48 h-48 bg-white rounded-lg flex items-center justify-center border-4 border-gray-300">
-                <p className="text-gray-400 text-center text-sm">
-                  QR Code
-                  <br />
-                  Placeholder
-                </p>
-              </div>
+            {/* MANUAL CODE */}
+            <p className="text-sm text-gray-600 mb-2 text-center">
+              Or enter this code manually
+            </p>
+            <div className="p-3 bg-gray-100 rounded text-center font-mono mb-6 text-gray-800 tracking-wider">
+              {manualCode}
             </div>
 
-            <div className="mb-6">
-              <p className="text-sm text-gray-600 mb-2">
-                Or enter this code manually:
-              </p>
-              <div className="p-4 text-gray-600 bg-gray-100 rounded-lg font-mono text-center text-sm">
-                JBSW Y3DP EHPK 3PXP
-              </div>
-            </div>
-
+            {/* OTP INPUT */}
             <input
               type="text"
-              placeholder="Enter 6-digit code from app"
-              className="w-full text-gray-600 px-4 py-3 border border-gray-300 rounded-lg mb-4 text-center text-lg font-mono"
-              maxLength="6"
+              value={verificationCode}
+              onChange={e =>
+                setVerificationCode(e.target.value.replace(/\D/g, ""))
+              }
+              placeholder="Enter 6-digit code"
+              maxLength={6}
+              className="w-full text-center text-lg text-gray-900 border border-gray-300 rounded-lg py-3 mb-4 focus:ring-2 focus:ring-indigo-500 outline-none"
             />
 
             <div className="flex gap-3">
               <button
                 onClick={() => setShowQRModal(false)}
-                className="flex-1 text-gray-600 px-6 py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
+
               <button
                 onClick={confirm2FA}
-                className="flex-1 text-gray-600 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md"
+                disabled={verificationCode.length !== 6 || isLoading}
+                className={`flex-1 text-white rounded-lg py-2 transition-all ${
+                  verificationCode.length === 6 && !isLoading
+                    ? "bg-indigo-600 hover:bg-indigo-700 shadow-md"
+                    : "bg-gray-400 cursor-not-allowed"
+                }`}
               >
-                Verify & Enable
+                {isLoading ? "Verifying..." : "Verify & Enable"}
               </button>
             </div>
           </div>
